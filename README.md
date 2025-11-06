@@ -6,46 +6,47 @@
 
 ### FDS server
 
-`fds_server.py` 是一个用于 FortiGate 的自定义授权服务器，可用于较旧版本，例如 FortiGate VM64 v7.4.1。与之前的方法相比，使用 FDS server 可以修改序列号（包括前缀）、增加 CPU 和内存数量，并且可以激活更多的 VDOM。目前，该方法仅适用于旧版本。
+`fds_server.py` 是一个用于 FortiGate 的自定义授权服务器，可用于旧版本（例如 FortiGate VM64 v7.4.1）。与之前的方法相比，使用 FDS server 可以修改序列号（包含前缀）、增加 CPU 和内存数量，并且还能激活更多 VDOM。目前该方法只能应用于旧版本。
 
-**使用方法**
+**如何使用**
 
 以 FortiGate VM64 7.4.1（VMWARE）为例。
 
-首先需要部署虚拟机并在 CLI 中完成网络接口的配置。然后需要在与 FortiGate 在同一网络的系统上启动 FDS server（确保 FortiGate 可以访问 FDS server 的 8890 端口）。
+首先，你需要部署虚拟机并在 CLI 中完成网络接口配置。然后需要在与 FortiGate 位于同一网络的系统上启动 FDS server（确保 FortiGate 能访问 FDS server 的 8890 端口）。
 
 在 FortiGate 上执行以下命令：
 
+```
 config system central-management
-set mode normal
-set type fortimanager
-set fmg <FDS 服务器的 IP 地址>
-config server-list
-edit 1
-set server-type update rating
-set server-address <FDS 服务器的 IP 地址>
+    set mode normal
+    set type fortimanager
+    set fmg <FDS server 的 IP 地址>
+    config server-list
+    edit 1
+        set server-type update rating
+        set server-address <FDS server 的 IP 地址>
+	end
+
+    set fmg-source-ip <FortiGate 的 IP 地址>
+    set include-default-servers disable
+    set vdom root
 end
-set fmg-source-ip <FortiGate 的 IP 地址>
-set include-default-servers disable
-set vdom root
-end
+```
 
-go
-复制代码
+运行 `license_old.py` 脚本生成 License 文件，登录 FortiGate 的 Web 服务并导入该 License 文件。
 
-运行 `license_old.py` 脚本以生成 License 文件，然后登录 FortiGate 的 Web 界面导入该 License 文件。
+系统会自动重启。系统启动后，你应该能在 FDS server 上看到一些输出，例如：
 
-系统将自动重启。系统启动后，你应该能够在 FDS server 端看到类似输出，例如：
-
+```
 ========================
-[] Parsing data
+[*] Parsing data
 [+] Magic: PUTF
 [+] System version: 07004000
 [+] Payload length: 363
 [+] Header length: 64
 [+] Time: 202505301704
 [+] Header crc32: 0x946cdd64
-[] Parsing obj
+[*] Parsing obj
 [+] Magic: FCPC
 [+] Name: Command Object
 [+] Payload length: 235
@@ -53,15 +54,12 @@ go
 [+] Payload crc32: 0x209e4867
 [+] Header crc32: 0xaa2ece4
 [+] Payload: b'Protocol=3.0|Command=VMSetup|Firmware=FGVM64-FW-7.04-2463|SerialNumber=FGVM32GVOVCLUK2G|Connection=Internet|Address=192.168.66.150:0|Language=en-US|TimeZone=-7|UpdateMethod=1|Uid=564d678fc9f2506bb8aebfde4052bbbd|VMPlatform=VMWARE\r\n\r\n\r\n'
-[] Packing obj
-[] Packing req
+[*] Packing obj
+[*] Packing req
 [*] Sending response
+```
 
-yaml
-复制代码
-
-登录 Web 界面。如果一切正常，将会进入配置向导。  
-**不要注册 FortiCare 并禁用自动补丁升级。**
+登录到 Web 服务。如果一切顺利，你会进入配置向导。**不要注册 FortiCare，并且禁用自动补丁升级。**
 
 ![](img/reg_wizard1.png)
 
@@ -69,96 +67,60 @@ yaml
 
 **缺点**
 
-- FortiCare 支持缺失，因此系统无法接收 AntiVirus/IPS/Firmware 等更新。
-- 部分功能可能无法正常工作（未测试）。
+FortiCare 支持缺失，因此系统无法接收 AntiVirus/IPS/Firmware 等更新。
 
-如果你遇到任何问题，请提交 Issue。
+部分功能可能无法正常工作（未测试）。
 
----
+如果你遇到任何问题，请提交 issue。
 
-### 版本 > 7.4.1
+### Versions > 7.4.1
 
-**该部分暂未更新。**
+**此部分尚未更新。**
 
-对于较新版本，你需要先对 `flatkc` 和 `init` 进行补丁处理。请依照以下步骤：
+对于较新的版本，你需要先对 `flatkc` 和 `init` 进行补丁。请按照以下步骤操作。
 
-导入 OVF 模板并启动系统，等待系统完成初始化
+```
+1. 导入 OVF 模板并启动系统。等待系统完成初始化
+2. 关闭虚拟机并移除第一块虚拟磁盘（2GB）
+3. 将该虚拟磁盘安装到另一台 Linux 系统
+4. 挂载根分区（FORTIOS），并提取 “flatkc” 与 “rootfs.gz” 文件，务必做好备份
+5. 运行命令：'python3 decrypt.py -f rootfs.gz -k flatkc' 解密 rootfs.gz 文件
+6. 解压 rootfs.gz 和 bin.tar.xz 文件，执行此步骤需要 root 权限
+       gzip -d ./dec.gz
+       mkdir rootfs
+       cd rootfs && mv ../dec ./
+       sudo su
+       cpio -idmv < ./dec
+       rm -rf ./dec
+       xz -d ./bin.tar.xz && tar -xvf ./bin.tar && rm -rf ./bin.tar
+       cd .. && mv ./rootfs/bin/init ./
+7. 运行命令：'python3 patch.py init' 对 init 文件打补丁
+8. 如需，也可添加其他文件（如 busybox）。然后重新压缩 rootfs.gz
+       chmod 755 ./init.patched && mv ./init.patched ./rootfs/bin/init
+       cd rootfs
+       tar -cvf bin.tar bin && xz bin.tar && rm -rf bin
+       find . | cpio -H newc -o > ../rootfs.raw && cd ..
+       cat ./rootfs.raw | gzip > rootfs.gz
+9. 运行命令：'python3 patch.py flatkc' 对 flatkc 文件打补丁
+10. 将 rootfs.gz 与 flatkc.patched 覆盖写回虚拟磁盘
+11. 将该虚拟磁盘从 Linux 系统卸载，并安装回原系统
+12. 启动系统
+```
 
-关闭虚拟机并移除第一块虚拟磁盘（2GB）
+系统启动后，运行 `python3 license_new.py` 命令，并将生成的 `License.lic` 文件导入到系统中。
 
-将该磁盘挂载到另一台 Linux 系统
+注意：系统重启后，你可能需要再次更改网络适配器的 IP 地址。
 
-挂载根分区（FORTIOS），提取 "flatkc" 和 "rootfs.gz" 文件并做好备份
-
-运行：python3 decrypt.py -f rootfs.gz -k flatkc 以解密 rootfs.gz
-
-解压 rootfs.gz 和 bin.tar.xz（需 root 权限）
-gzip -d ./dec.gz
-mkdir rootfs
-cd rootfs && mv ../dec ./
-sudo su
-cpio -idmv < ./dec
-rm -rf ./dec
-xz -d ./bin.tar.xz && tar -xvf ./bin.tar && rm -rf ./bin.tar
-cd .. && mv ./rootfs/bin/init ./
-
-运行：python3 patch.py init 生成补丁 init
-
-如果需要，可以添加其他文件（如 busybox）。然后重新压缩 rootfs：
-chmod 755 ./init.patched && mv ./init.patched ./rootfs/bin/init
-cd rootfs
-tar -cvf bin.tar bin && xz bin.tar && rm -rf bin
-find . | cpio -H newc -o > ../rootfs.raw && cd ..
-cat ./rootfs.raw | gzip > rootfs.gz
-
-运行：python3 patch.py flatkc 以补丁 flatkc
-
-将 rootfs.gz 与 flatkc.patched 写回虚拟磁盘
-
-将虚拟磁盘从 Linux 卸载并重新挂回原虚拟机
-
-启动系统
-
-yaml
-复制代码
-
-启动后，运行 `python3 license_new.py` 并导入生成的 `License.lic`。
-
-> 注意：系统重启后可能需要重新配置网络接口 IP。
-
-详见：https://wzt.ac.cn/2024/04/02/fortigate_debug_env2/
-
----
+详情参见：https://wzt.ac.cn/2024/04/02/fortigate_debug_env2/
 
 ### VDOM license
 
-需要先安装 libssl-dev。
+你需要先安装 libssl-dev。
 
-编译：
+编译：`gcc vdom.c -o vdom -lssl -lcrypto -lz`
 
-gcc vdom.c -o vdom -lssl -lcrypto -lz
+运行：`./vdom FGVMPG0000000000 15`
 
-复制代码
+导入 license：`execute upd-vd-license xxx`
 
-运行：
-
-./vdom FGVMPG0000000000 15
-
-复制代码
-
-导入 License：
-
-execute upd-vd-license xxx
-
-复制代码
-
-如果看到：
-
-Error: VDOM number (xxx) exceeds limit for this model
-
-yaml
-复制代码
-
-说明你的基础 License 不支持更多 VDOM 数量。
-
----
+如果看到 `Error: VDOM number (xxx) exceeds limit for this model`，则表示你的基础 license 不支持过多的 VDOM。
